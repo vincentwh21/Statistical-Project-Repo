@@ -1,0 +1,112 @@
+---
+title: "Vincent's part on SAS Project"
+author: "Vincent William Hadiasali"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+Libraries
+```{r}
+library(ggplot2)
+library(tseries)
+library(forecast)
+library(dplyr)
+library(lubridate)
+library(xts)
+library(zoo)
+```
+
+Import necessary files
+
+```{r}
+order <- read.csv("~/University File/Year 3 Spring/MA409/Project/OlistData/olist_order_items_dataset.csv")
+status <- read.csv("~/University File/Year 3 Spring/MA409/Project/OlistData/olist_orders_dataset.csv")
+payment <- read.csv("~/University File/Year 3 Spring/MA409/Project/OlistData/olist_order_payments_dataset.csv")
+product <- read.csv("~/University File/Year 3 Spring/MA409/Project/OlistData/olist_products_dataset.csv")
+translation <- read.csv("~/University File/Year 3 Spring/MA409/Project/OlistData/product_category_name_translation.csv")
+```
+
+If the order is canceled or unavailable, that means it cannot be counted to revenue, sales number and even freight value.
+```{r}
+# Match the product categorical name by the product ID
+verified <- status[status$order_status != "canceled"
+                   & status$order_status != "unavailable",]
+verified_order <- merge(order, verified, by = "order_id")
+```
+
+Combined the data and use the translated product category name.
+Since the analysis says to 2018, erase anything after 2018.
+```{r}
+combined_data <- merge(verified_order, product, by = "product_id")
+translated_data <- merge(combined_data, translation, by = "product_category_name")
+# Sort based on the date
+df <- translated_data[order(translated_data$shipping_limit_date),
+                    c("order_id", "product_category_name_english", "shipping_limit_date", "order_item_id", "freight_value")]
+# Only keep the necessary details of time
+df$shipping_limit_date <- as.Date(df$shipping_limit_date)
+df <- df[df$shipping_limit_date < as.Date("2019-01-01"),]
+nrow(df)
+```
+
+Monthly revenue trend
+```{r}
+revenue_df <- merge(df, payment, by = "order_id")
+revenue <- aggregate(revenue_df$payment_value, list(revenue_df$shipping_limit_date), FUN=sum)
+revenue$Month <- floor_date(revenue$Group.1, "month")
+m_revenue <- revenue %>% group_by(Month) %>% summarize(sum = sum(x))
+m_revenue <- m_revenue[-c(2, 23), ]
+plot(m_revenue, type = 'l', main = "Trend of total revenue by month", ylab = "Total revenue")
+```
+
+Monthly total number of order
+```{r}
+order_df <- aggregate(df$order_item_id, list(df$shipping_limit_date), FUN=sum)
+order_df$Month <- floor_date(order_df$Group.1, "month")
+m_order <- order_df %>% group_by(Month) %>% summarize(sum = sum(x))
+m_order <- m_order[-c(1, 3, 24), ]
+plot(m_order, type = 'l', main = "Trend of total order number by month",
+     ylab = "Total number of order")
+```
+
+freight value prediction analysis
+
+Before freight value time series prediction, we must convert it to monthly
+```{r}
+freight <- aggregate(df$freight_value, list(df$shipping_limit_date), FUN=sum)
+
+#round dates down to month
+freight$month <- floor_date(freight$Group.1, "month")
+
+#find mean sales by month
+m_freight <- freight %>% group_by(month) %>% summarize(sum = sum(x))
+m_freight
+
+plot(m_freight, type = 'o')
+```
+
+Because there are three months where most of days are missing, we cannot include them in forecasting.
+```{r}
+m_freight <- m_freight[-c(1, 3, 24), ]
+m_freight
+
+adf.test(m_freight$sum)
+Box.test(m_freight$sum, type="Ljung-Box")
+plot(forecast(m_freight$sum, h = 120))
+auto.arima(m_freight$sum)
+
+#Differencing
+adf.test(diff(m_freight$sum))
+Box.test(diff(m_freight$sum), type="Ljung-Box")
+plot(forecast(diff(m_freight$sum), h = 120), ylim = c(-30000, 50000))
+
+#Log transformation
+adf.test(log(m_freight$sum))
+Box.test(log(m_freight$sum), type="Ljung-Box")
+plot(forecast(log(m_freight$sum), h = 120))
+
+#Differencing and Log transformation
+adf.test(diff(log(m_freight$sum)))
+Box.test(diff(log(m_freight$sum), type="Ljung-Box"))
+plot(forecast(diff(log(m_freight$sum)), h = 120))
+```
+

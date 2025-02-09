@@ -1,0 +1,285 @@
+---
+title: "FTS Project"
+author: "Vincent William Hadiasali"
+date: "`r Sys.Date()`"
+output: html_document
+---
+# Overview
+```{r library}
+library(readr)
+library(tseries)
+library(fGarch)
+library(rugarch)
+library(stats)
+library("FinTS")
+library(forecast)
+library(tsDyn)
+library(urca)
+```
+
+
+```{r}
+data1 <- read.csv("C:/Users/vince/Documents/University File/Year 4 Fall/FIN5017/Project/data1.csv")
+data1$Date <- as.Date(data1$Date, format = "%m/%d/%y")
+data2 <- read.csv("C:/Users/vince/Documents/University File/Year 4 Fall/FIN5017/Project/data2.csv")
+data2$Date <- as.Date(data2[,2], format = "%m/%d/%y")
+```
+
+# Time Series Analysis on the future prices of 4 foods.
+
+## Basic Time Series plotting for all future price
+
+```{r pressure, echo=FALSE}
+ncoldata1 <- ncol(data1)
+colnames(data1) <- gsub("[_.]", " ", colnames(data1))
+
+
+# Loop to create plots for each column in the data frame (except the first column)
+for (i in 2:ncol(data1)) { # Start from the 2nd column, assuming the 1st is 'Date'
+  plot(
+    data1[, i],                       # The i-th column of the data frame
+    ylab = "Value",                   # Y-axis label
+    xlab = "Index",                   # X-axis label (adjust if 'Date' is meaningful)
+    main = colnames(data1)[i],        # Use the column name as the title
+    type = "l"                        # Line with points
+  )
+}
+```
+## Stationarity test
+```{r}
+#Test its stationarity
+for (i in 2:ncol(data1)) { # Start from the 2nd column, assuming the 1st is 'Date'
+  cat("The ADF Test result of", colnames(data1)[i])
+  adf_result <- adf.test(data1[, i], alternative = "stationary")
+  
+  # Print the test result
+  print(adf_result)                       # Line with points
+}
+```
+
+
+## GARCH Test
+```{r}
+
+# 进行LM检验
+# Loop through columns (excluding the first column, assuming it's 'Date')
+for (i in 2:ncol(data1)) {
+  # Fit a simple linear model (or replace this with your preferred model)
+  t <- 1:nrow(data1)
+  model <- lm(data1[, i] ~ t)  # This fits a model with just an intercept
+  
+  # Extract residuals from the model
+  res <- residuals(model)
+  
+  # Perform ARCH test on the residuals
+  arch_test_result <- ArchTest(res, , FALSE)
+  
+  # Print results
+  cat("ARCH Test for column:", colnames(data1)[i], "\n")
+  print(arch_test_result)
+  cat("\n")
+}
+
+```
+
+
+
+
+## BDS Test for Non-linear model detection
+```{r}
+for (i in 2:ncol(data1)) {
+    cat("\nBDS Test for column:", colnames(data1)[i], "\n")  # Print column name
+    tryCatch(
+      {
+        # Print the test result
+        print(bds.test(data1[, i]))
+      },
+      error = function(e) {
+        # Handle errors (e.g., invalid input for bds.test)
+        cat("Error in BDS Test for column:", colnames(data1)[i], "\n")
+        print(e$message)
+      }
+    )
+  }
+```
+
+## Test SETAR Model on each future price
+```{r}
+library(tseries)  # Load the required library for bds.test()
+
+# Loop through columns (excluding the first, assuming it's an index or 'Date')
+for (m in 2:5) {
+  cat("for m = ", m, "\n")
+  for (i in 2:ncol(data1)) {
+    cat("\nSETAR Test for column:", colnames(data1)[i], "\n")  # Print column name
+    tryCatch(
+      {
+        # Print the test result
+        print(setarTest(data1[, i], m = m))
+      },
+      error = function(e) {
+        # Handle errors (e.g., invalid input for bds.test)
+        cat("Error in BDS Test for column:", colnames(data1)[i], "\n")
+        print(e$message)
+      }
+    )
+  }
+}
+```
+
+## Fit the SETAR Model based on the SETAR Test, get its threshold and plot them
+### Soya Bean
+
+```{r}
+library(ggplot2)
+
+setar_bean <- setar(data1[, 2], m = 2, thDelay = 1)
+summary(setar_bean)
+
+regime_bean <- ifelse(data1[, 2] <= 3831, "Low Regime", "High Regime")
+
+ggplot(data1, aes(x = 1:nrow(data1), y = data1[,2])) +
+  geom_line() +
+  geom_hline(yintercept = 3831, color = "red", linetype = "dashed") +
+  geom_point(aes(color = regime_bean)) +
+  labs(title = "Soya Bean Meal Future Price: Regimes", y = "Price", x = "Index") +
+  scale_color_manual(values = c("Low Regime" = "blue", "High Regime" = "green"))
+```
+
+### Rice
+```{r}
+library(ggplot2)
+
+setar_rice <- setar(data1[, 3], m = 5, thDelay = 1)
+summary(setar_rice)
+
+regime_rice <- ifelse(data1[, 3] <= 3440, "Low Regime", "High Regime")
+
+ggplot(data1, aes(x = 1:nrow(data1), y = data1[,3])) +
+  geom_line() +
+  geom_hline(yintercept = 3440, color = "red", linetype = "dashed") +
+  geom_point(aes(color = regime_rice)) +
+  labs(title = "Rice Future Price: Regimes", y = "Price", x = "Index") +
+  scale_color_manual(values = c("Low Regime" = "blue", "High Regime" = "green"))
+```
+
+### Wheat
+```{r}
+setar_wheat <- setar(data1[, 5], m = 3, thDelay = 2) #pick such thDelay because of lower AIC
+summary(setar_wheat)
+
+regime_wheat <- ifelse(data1[, 5] <= 852.5, "Low Regime", "High Regime")
+
+
+
+ggplot(data1, aes(x = 1:nrow(data1), y = data1[,5])) +
+  geom_line() +
+  geom_hline(yintercept = 852.5, color = "red", linetype = "dashed") +
+  geom_point(aes(color = regime_wheat)) +
+  labs(title = "Wheat Future Price: Regimes", y = "Price", x = "Index") +
+  scale_color_manual(values = c("Low Regime" = "blue", "High Regime" = "green"))
+```
+# Log Return
+## Transformation
+```{r}
+# Assuming data1 is your dataset, and columns 2 to 5 contain the price data
+log_r_future <- data1  # Create a new data frame to store log-returns
+
+# Loop through each column (2 to 5)
+for (col in 2:5) {
+  log_r_future[, col] <- c(NA, diff(log(data1[, col])))
+}
+colnames(log_r_future)[2:5] <- paste("Log return for", colnames(log_r_future)[2:5])
+  
+# View the computed log-returns
+log_r_future <- log_r_future[-1, ]
+head(log_r_future)
+```
+
+```{r}
+for (i in 2:ncol(log_r_future)) { # Start from the 2nd column, assuming the 1st is 'Date'
+  plot(
+    log_r_future[,i],                       # The i-th column of the data frame
+    ylab = "Value",                   # Y-axis label
+    xlab = "Index",                   # X-axis label (adjust if 'Date' is meaningful)
+    main = colnames(log_r_future)[i],        # Use the column name as the title
+    type = "l"                        # Line with points
+  )
+}
+```
+
+```{r}
+for (i in 2:ncol(data1)) { # Start from the 2nd column, assuming the 1st is 'Date'
+  cat(colnames(log_r_future)[i])
+  adf_result <- adf.test(log_r_future[, i], alternative = "stationary")
+  
+  # Print the test result
+  print(adf_result)                       # Line with points
+}
+```
+
+## GARCH Test
+```{r}
+
+# 进行LM检验
+# Loop through columns (excluding the first column, assuming it's 'Date')
+for (i in 2:ncol(log_r_future)) {
+  # Fit a simple linear model (or replace this with your preferred model)
+  t <- 1:nrow(log_r_future)
+  log_model <- lm(log_r_future[, i] ~ t)  # This fits a model with just an intercept
+  
+  # Extract residuals from the model
+  res <- residuals(log_model)
+  
+  # Perform ARCH test on the residuals
+  arch_test_result <- ArchTest(res, , FALSE)
+  
+  # Print results
+  cat(colnames(log_r_future)[i], "\n")
+  print(arch_test_result)
+  cat("\n")
+}
+
+```
+
+```{r}
+# Fit ARIMA model for soya bean meal
+arima_soya <- auto.arima(log_r_future[,2])
+summary(arima_soya)
+
+# Fit ARIMA model for rice
+arima_rice <- auto.arima(log_r_future[,3])
+summary(arima_rice)
+
+
+# Forecast for 10 periods ahead
+forecast_soya <- forecast(arima_soya, h = 25)
+forecast_rice <- forecast(arima_rice, h = 25)
+ 
+# Plot forecasts
+autoplot(forecast_soya, main = "ARIMA Forecast for Soya Bean Log Returns")
+autoplot(forecast_rice, main = "ARIMA Forecast for Rice Log Returns")
+
+checkresiduals(arima_soya)
+checkresiduals(arima_rice)
+```
+
+# GARCH Model evaluation
+```{r}
+# Function to fit GARCH models with different orders and print AIC/BIC
+spec_corn <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(p, q)),
+                       mean.model = list(armaOrder = c(0, 0), include.mean = TRUE), distribution.model = "std")
+garchfit_corn <- ugarchfit(spec, log_r_future[,4])
+
+spec_wheat <- ugarchspec(variance.model = list(model = "sGARCH", garchOrder = c(p, q)),
+                       mean.model = list(armaOrder = c(0, 0), include.mean = TRUE), distribution.model = "std")
+garchfit_wheat <- ugarchfit(spec, log_r_future[,5])
+
+print(ugarchforecast(fit = garchfit_corn, n.ahead = 25))
+print(ugarchforecast(fit = garchfit_wheat, n.ahead = 25))
+
+plot(ugarchforecast(fit = garchfit_corn, n.ahead = 25), which = 1)
+plot(ugarchforecast(fit = garchfit_corn, n.ahead = 25), which = 3)
+plot(ugarchforecast(fit = garchfit_wheat, n.ahead = 25), which = 1)
+plot(ugarchforecast(fit = garchfit_wheat, n.ahead = 25), which = 3)
+```

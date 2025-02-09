@@ -1,0 +1,311 @@
+---
+title: "HousePriceAnalysis"
+output: html_document
+date: "2023-12-14"
+---
+```{r}
+###### Load dat0.csv
+### 8430 samples. Data variables: unit price, area, floors, number of halls,
+### number of rooms, whether it is a school district, orientation, year of 
+### construction, whether it is close to a subway station, urban area, city
+
+house_price <- read.csv("~/University File/Year 3 Fall/MA308/Project/dat0.csv")
+```
+
+
+```{r}
+### Creat a new column called "age" to show the age of the house
+house_price$age <- 2018 - house_price$year
+
+attach(house_price)
+```
+
+
+```{r}
+####
+#### **boxplot of house prices of different disincts
+library(ggplot2)
+library(dplyr)
+
+# Calculate average price of each distincts
+
+average_prices <- house_price %>%
+  group_by(city, district) %>%
+  summarise(avg_price = mean(danjia))
+
+# sort by average price
+
+sorted_districts <- average_prices %>%
+  arrange(city, desc(avg_price)) %>%
+  pull(district)
+
+ggplot(house_price, aes(x = factor(district, levels = sorted_districts), y = danjia)) +
+  geom_boxplot() +
+  facet_wrap(~city, scales = "free_x") +
+  labs(title = "2018年三个城市不同区按房价平均值排序的箱线图",
+       x = "",
+       y = "单价/元") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
+```
+
+
+```{r}
+
+####
+#### **Apply lm to 'danjia'
+
+# Transform the discrete variables to factor
+house_price$district <- as.factor(house_price$district)
+house_price$floor <- as.factor(house_price$floor)
+house_price$chaoxiang <- as.factor(house_price$chaoxiang)
+
+model_lm <- lm(danjia ~ area + floor + hall + room + school + chaoxiang + subway + age, 
+               data = house_price)
+
+summary(model_lm)
+
+```
+
+The model is \(\text{price} = 26299.21 + 127.69 \times \text{area} + 47.01 \times \text{floor高层} - 2069.07 \times \text{floor中层} + 51.04 \times \text{hall} - 264.40 \times \text{room} + 6612.52 \times \text{school} +4304.18 \times \text{chaoxiang南向} + 8507.28 \times \text{chaoxiang其他} - 10239.18 \times \text{subway} + 193.18 \times \text{age}\).
+
+
+```{r}
+### Find the best model of each citys or districts
+library(caret)
+library(MASS)
+
+fit_best_model <- function(region) {
+  data = house_price
+  if (region %in% c("广州", "厦门", "深圳")) {
+    subset_data <- data[data$city == region, ]
+    formula <- danjia ~ area + floor + hall + room + school + chaoxiang + subway + age + district
+    # Stepwise regression
+    initial_model <- lm(formula, data = subset_data)
+    output <- capture.output(models <- stepAIC(initial_model, direction = "both"))
+    final_model <- coef(models)
+    ## formula <- danjia ~ area + floor + hall + room + school + chaoxiang + subway + age + district
+      # k-fold cross-validation
+    ## control <- trainControl(method = "cv", number = 5)  
+    ## models <- train(formula, data = subset_data, method = "lm", trControl = control, metric = "MSE")
+    ## best_model <- models$finalModel
+
+  } else {
+    subset_data <- data[data$district == region, ]
+    formula <- danjia ~ area + floor + hall + room + school + chaoxiang + subway + age
+    # Stepwise regression
+    initial_model <- lm(formula, data = subset_data)
+    output <- capture.output(models <- stepAIC(initial_model, direction = "both"))
+
+    final_model <- coef(models)
+    
+
+      # k-fold cross-validation
+    ## control <- trainControl(method = "cv", number = 5)  
+    ## models <- train(formula, data = subset_data, method = "lm", trControl = control, metric = "MSE")
+    ## best_model <- models$finalModel
+  }
+  cat("\033[31m****\033[0m", region, "\n")
+
+  return(final_model)
+}
+
+```
+
+### Apply the function fit_best_model()
+
+```{r}
+cat("\033[31mModel of different cities:\033[0m", "\n")
+fit_best_model("深圳")
+fit_best_model("广州")
+fit_best_model("厦门")
+
+cat("\033[31mModel of different districts:\033[0m", "\n")
+
+district_levels <- levels(house_price$district)
+
+for (district in district_levels) {
+  print(fit_best_model(district))
+}
+
+```
+#### price vs. age 
+
+```{r}
+plot_price_age <- function(region, data = house_price) {
+
+  if (region %in% c("广州", "厦门", "深圳")) {
+    subset_data <- data[data$city == region, ]
+  } else {
+    subset_data <- data[data$district == region, ]
+  }
+
+  mean_prices <- tapply(subset_data$danjia, subset_data$age, mean)
+
+  mean_prices_df <- data.frame(age = as.numeric(names(mean_prices)), mean_danjia = as.numeric(mean_prices))
+
+  ggplot(mean_prices_df, aes(x = age, y = mean_danjia)) +
+    geom_point(size = 0.6, color = "red") +
+    geom_smooth(method = "loess", se = FALSE, color = "blue") +
+    labs(title = paste( region),
+         x = "房龄", y = "平均房价",
+         xlab = "共同的横坐标标签", ylab = "共同的纵坐标标签") + 
+    theme_minimal() +
+    theme(axis.text = element_text(size = 5),
+          axis.title = element_text(size = 5),
+          plot.title = element_text(size = 10, face = "bold"))
+}
+```
+
+
+
+
+```{r}
+library(patchwork)
+
+district_levels <- levels(house_price$district)
+
+# Create a list to store individual plots
+plots_list <- list()
+
+# Loop through districts and create plots
+for (district in district_levels) {
+  plot <- plot_price_age(district)
+  plots_list[[district]] <- plot
+}
+
+# Combine plots using patchwork
+big_plot <- wrap_plots(plots_list, ncol = 4)
+
+# Display the combined plot
+print(big_plot)
+```
+
+Vincent part's
+
+```{r}
+library(leaps)
+# Create a list to store individual plots
+plots_list <- list()
+
+district_levels <- levels(house_price$district)
+for (district in district_levels) {
+  leaps <- regsubsets(danjia ~ .,
+                    data = house_price[
+                      house_price$district == district,
+                      c("area", "hall", "room", "age", "danjia",
+                        "floor","school","chaoxiang", "subway")])
+  plot <- plot(leaps, scale="adjr2", main = paste("House price in", district))
+  plots_list[[district]] <- plot
+}
+```
+
+```{r}
+boxplot(danjia ~ subway, data = house_price)
+boxplot(danjia ~ school, data = house_price)
+boxplot(danjia ~ chaoxiang, data = house_price)
+boxplot(danjia ~ hall, data = house_price)
+boxplot(danjia ~ floor, data = house_price)
+```
+
+```{r}
+library(car)
+library(forecast)
+
+qqPlot(lm(danjia ~ subway, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+qqPlot(lm(danjia ~ school, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+qqPlot(lm(danjia ~ area, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+qqPlot(lm(danjia ~ hall, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+qqPlot(lm(danjia ~ age, data = house_price),simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+lambda <- BoxCox.lambda(house_price$danjia, lower=0)
+y_transformed <- BoxCox(house_price$danjia, lambda)
+qqPlot(lm(y_transformed ~ age, data = house_price),simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+bartlett.test(danjia ~ school, data = house_price)
+outlierTest(aov(danjia ~ school, data = house_price))
+
+
+```
+
+
+```{r eval=FALSE, include=FALSE}
+for(district in district_levels){
+  boxplot(danjia ~ subway,
+          data = house_price[house_price$district == district,
+                             c("danjia","subway", "district")],
+          main = paste("Boxplot of danjia in every subway data in", district))
+  boxplot(danjia ~ school,
+          data = house_price[house_price$district == district,
+                             c("danjia","school", "district")],
+          main = paste("Boxplot of danjia in every school data in", district))
+}
+
+direction_levels = levels(house_price$chaoxiang)
+for(district in district_levels){
+  boxplot(danjia ~ chaoxiang,
+          data = house_price[house_price$district== district,
+                             c("danjia","chaoxiang", "district")],
+          main = paste("Boxplot of danjia in every direction in",
+                       district)
+          )
+}
+```
+
+```{r}
+for (district in district_levels) {
+  data_district <- house_price[house_price$district == district, c("area", "hall", "room", "age", "danjia", "floor","school","chaoxiang", "subway")]
+
+  print(district)
+  anova1_district <- aov(danjia ~ subway, data = house_price)
+  anova2_district <- aov(danjia ~ school, data = house_price)
+  anova3_district <- aov(danjia ~ chaoxiang, data = house_price)
+  print(summary(anova1_district))
+  print(summary(anova2_district))
+  print(summary(anova3_district))
+}
+```
+
+```{r eval=FALSE, include=FALSE}
+library(car)
+for (district in district_levels) {
+  data_district <- house_price[house_price$district == district,
+                               c("area", "hall", "room", "age", "danjia",
+                                 "floor","school","chaoxiang", "subway")]
+
+  print(district)
+  qqPlot(lm(danjia ~ school, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+  print(bartlett.test(danjia ~ school, data = house_price))
+  print(outlierTest(aov(danjia ~ school, data = house_price)))
+  
+  qqPlot(lm(danjia ~ chaoxiang, data = house_price), simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+  print(bartlett.test(danjia ~ chaoxiang, data = house_price))
+  print(outlierTest(aov(danjia ~ chaoxiang, data = house_price)))
+}
+```
+
+```{r}
+library(HH)
+
+print(district_levels)
+for (district in district_levels) {
+  data_district <- house_price[house_price$district == district,
+                               c("area", "hall", "room", "age", "danjia",
+                                 "floor","school","chaoxiang", "subway")]
+  print(district)
+  print(vif(danjia ~ ., data = data_district))
+}
+```
+

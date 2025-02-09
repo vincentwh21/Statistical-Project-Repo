@@ -1,0 +1,40 @@
+---
+title: "MSA Project"
+author: "Vincent William Hadiasali"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup}
+loc <- "http://archive.ics.uci.edu/ml/machine-learning-databases/"
+ds <- "breast-cancer-wisconsin/breast-cancer-wisconsin.data"
+url <- paste(loc, ds, sep="")
+breast <- read.table(url, sep=",", header=FALSE, na.strings="?")
+names(breast) <- c("ID", "clumpThickness", "sizeUniformity",
+                   "shapeUniformity", "maginalAdhesion",
+                   "singleEpithelialCellSize", "bareNuclei",
+                   "blandChromatin", "normalNucleoli", "mitosis", "class")
+df=breast[-1] ### get rid of the first variable
+df$class=factor(df$class,levels=c(2,4),labels=c("benign","malignant"))
+set.seed(1234)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+df
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

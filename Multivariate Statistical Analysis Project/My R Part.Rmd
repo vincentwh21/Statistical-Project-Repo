@@ -1,0 +1,50 @@
+---
+title: "MSA Project Vincent's R Part"
+author: "Vincent William Hadiasali"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+
+```{r}
+divorce <- read.csv("~/University File/Year 3 Spring/MA304/Project/MSAProject/divorce.csv", sep = ";")
+```
+
+Linear Model and its analysis
+```{r}
+divorce$Class=factor(divorce$Class,levels=c(1,0),labels=c("Married", "Divorced"))
+set.seed(1234)
+
+##### generate training data and validation data
+train= sample(nrow(divorce), 0.7*nrow(divorce))
+divorce.train <- divorce[train,]
+divorce.validate <- divorce[-train,]
+table(divorce.train$Class)
+table(divorce.validate$Class)
+
+library(randomForest)
+fit.forest <- randomForest(Class~ ., data=divorce.train,
+                           na.action=na.roughfix, importance=TRUE)
+fit.forest
+importance(fit.forest, type=2)
+```
+
+QQ Plot
+```{r eval=FALSE, include=FALSE}
+library(MASS)
+lm <- lm(Class ~ ., data = divorce)
+#qqPlot(lm, simulate = TRUE, main= "Q−Q Plot", labels = FALSE)
+summary(lm)
+
+stepAIC(lm, direction="both")
+reduced_lm <- lm(formula = Class ~ Atr2 + Atr3 + Atr6 + Atr7 + Atr8 + Atr12
+                 + Atr13 + Atr14 + Atr15 + Atr17 + Atr22 + Atr24 + Atr25 + Atr26
+                 + Atr27 + Atr28 + Atr29 + Atr31 + Atr37 + Atr40 + Atr46 + Atr48
+                 + Atr49 + Atr52 + Atr53 + Atr54, data = divorce)
+summary(reduced_lm)
+```
+
+```{r}
+
+```
+
